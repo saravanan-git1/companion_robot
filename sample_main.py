@@ -1,12 +1,12 @@
 import cv2
-#import face_recognition
+import face_recognition
 import os
 import sys
 import speech_recognition as sr
 import pyttsx3
 import threading
 import time
-#from openai import OpenAI
+from openai import OpenAI
 
 if sys.platform == "win32":
     _portaudio_dll_directory = os.add_dll_directory(os.path.join(sys.prefix, "Scripts"))
@@ -16,8 +16,8 @@ import config
 from face_display import RobotFace
 
 # Initialize components
-##client = OpenAI(api_key=config.OPENAI_API_KEY)
-client = None
+client = OpenAI(api_key=config.OPENAI_API_KEY)
+#client = None
 face_renderer = RobotFace()
 
 # Initialize text-to-speech engine
@@ -59,13 +59,19 @@ def get_ai_response(user_input):
 def listen_to_voice():
     """Captures microphone voice streaming data."""
     recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        try:
+    try:
+        with sr.Microphone() as source:
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
             audio = recognizer.listen(source, timeout=3, phrase_time_limit=4)
             return recognizer.recognize_google(audio)
-        except (sr.UnknownValueError, sr.WaitTimeoutError):
-            return None
+    except sr.WaitTimeoutError:
+        return None
+    except sr.UnknownValueError:
+        print("[Voice Error] Speech could not be understood.")
+        return None
+    except sr.RequestError as error:
+        print(f"[Voice Error] Speech recognition service unavailable: {error}")
+        return None
 
 def voice_interaction_loop():
     """Background loop managing active dialogues when the owner is near."""
@@ -108,13 +114,12 @@ def main():
     
     # Load user verification assets
     try:
-        ##owner_image = face_recognition.load_image_file("my_face.jpg")
-        ##owner_encoding = face_face_encodings = face_recognition.face_encodings(owner_image)[0]
-        print("hi")
-        
-    except IndexError:
-        print("Error: Could not extract facial features from my_face.jpg. Please use a clearer photo.")
-        return
+        owner_image = face_recognition.load_image_file("my_face.jpg")
+        owner_encodings = face_recognition.face_encodings(owner_image)
+        if not owner_encodings:
+            print("Error: Could not extract facial features from my_face.jpg. Please use a clearer photo.")
+            return
+        owner_encoding = owner_encodings[0]
     except FileNotFoundError:
         print("Error: Please drop a photo named 'my_face.jpg' into the project folder first.")
         return
@@ -129,7 +134,7 @@ def main():
     
     # Fire up the background microphone monitoring agent
     threading.Thread(target=voice_interaction_loop, daemon=True).start()
-    print("1hi")
+    print("hi")
     print("Application successfully initialized. Open the 'Robot Face' display window.")
     
     while True:
@@ -146,23 +151,21 @@ def main():
         # Periodically scan the camera frames to identify if you are there
         if frame_counter % 10 == 0 and robot_mood != "Thinking 🤔" and robot_mood != "Talking 💬":
             small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            rgb_small_frame = small_frame[:, :, ::-1]
+            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-            #commentted
-           ## face_locations = face_recognition.face_locations(rgb_small_frame)
-           ## face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
-            face_encodings = False
+            face_locations = face_recognition.face_locations(rgb_small_frame)
+            face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
             
             if face_encodings:
-                #match = face_recognition.compare_faces([owner_encoding], face_encodings[0])
-                match = None
+                match = face_recognition.compare_faces([owner_encoding], face_encodings[0])
                 if match[0] and robot_mood == "Idle 😐":
                     robot_mood = "Happy 😊"
-                    trigger_speech("Hello master, nice to see you!")
-            else:
-                # Revert to sleepy standby if you leave the field of view
-                if robot_mood == "Happy 😊":
+                    trigger_speech("Hello Saravanan G, nice to see you!")
+                elif not match[0] and robot_mood == "Happy 😊":
                     robot_mood = "Idle 😐"
+            elif robot_mood == "Happy 😊":
+                # Revert to sleepy standby if you leave the field of view
+                robot_mood = "Idle 😐"
 
         # 1. Render and draw the Robot's dynamic face window
         face_window = face_renderer.render_face(robot_mood, frame_counter)
