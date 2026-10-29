@@ -1,10 +1,15 @@
 import cv2
 #import face_recognition
+import os
+import sys
 import speech_recognition as sr
 import pyttsx3
 import threading
 import time
 #from openai import OpenAI
+
+if sys.platform == "win32":
+    _portaudio_dll_directory = os.add_dll_directory(os.path.join(sys.prefix, "Scripts"))
 
 # Import our custom components
 import config
@@ -69,7 +74,11 @@ def voice_interaction_loop():
     while True:
         if robot_mood == "Happy 😊" and not is_speaking:
             print("[System Status]: Ready for voice command input...")
-            user_text = listen_to_voice()
+            try:
+                user_text = listen_to_voice()
+            except (AttributeError, OSError) as error:
+                print(f"[Voice Error] Microphone unavailable: {error}")
+                return
             
             if user_text:
                 print(f"User Input Detected: {user_text}")
@@ -112,6 +121,11 @@ def main():
 
     # Start webcam capture feeds
     video_capture = cv2.VideoCapture(0)
+    if not video_capture.isOpened():
+        print("[Camera Error] Could not open webcam (camera index 0).")
+        video_capture.release()
+        cv2.destroyAllWindows()
+        return
     
     # Fire up the background microphone monitoring agent
     threading.Thread(target=voice_interaction_loop, daemon=True).start()
@@ -120,8 +134,13 @@ def main():
     
     while True:
         frame_counter += 1
-        ret, frame = video_capture.read()
+        try:
+            ret, frame = video_capture.read()
+        except cv2.error as error:
+            print(f"[Camera Error] Could not read webcam frame: {error}")
+            break
         if not ret:
+            print("[Camera Error] Webcam stopped returning frames.")
             break
             
         # Periodically scan the camera frames to identify if you are there
