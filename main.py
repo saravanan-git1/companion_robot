@@ -1,3 +1,5 @@
+import os
+import sys
 import cv2
 import face_recognition
 import speech_recognition as sr
@@ -6,6 +8,10 @@ import threading
 import time
 from openai import OpenAI
 
+
+if sys.platform == "win32":
+    _portaudio_dll_directory = os.add_dll_directory(os.path.join(sys.prefix, "Scripts"))
+    
 # Import our custom components
 import config
 from face_display import RobotFace
@@ -43,12 +49,15 @@ def get_ai_response(user_input):
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": config.SYSTEM_PROMPT},
-                {"role": "user", "content": user_input}
-            ]
+                {"role": "user", "content": user_input},
+            ],
+            temperature=0.7,
+            max_tokens=200,
         )
-        return response.choices.message.content
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        return "System logic error. Check internet connection or API settings."
+        print(f"[OpenAI Error] {e}")
+        return "System logic error. Check API key, internet connection, or OpenAI account settings."
 
 def listen_to_voice():
     """Captures microphone voice streaming data."""
